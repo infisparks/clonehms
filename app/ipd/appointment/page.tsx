@@ -530,7 +530,7 @@ const IPDAppointmentPage = () => {
       console.warn("Skipping WhatsApp notification: Phone number is missing or invalid.");
       return;
     }
-    const token = "99583991573"; // Your provided token
+    const token = "9958399157"; // Your provided token
 
     try {
       const response = await fetch("https://a.infispark.in/send-text", {

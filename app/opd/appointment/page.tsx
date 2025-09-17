@@ -475,7 +475,7 @@ const AppointmentPage = () => {
     discount: number
   ) => {
     const apiUrl = "https://a.infispark.in/send-text"
-    const token = "99583991573" // Your API token
+    const token = "9958399157" // Your API token
     const formattedPhoneNumber = `91${phoneNumber}` // Assuming Indian numbers and API expects 91 prefix
 
     let message = `*Dear ${patientName},*\n\n`

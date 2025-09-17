@@ -14,7 +14,22 @@ import {
   endOfWeek,
   startOfMonth,
   endOfMonth,
+  startOfYear,
+  endOfYear,
+  eachDayOfInterval,
+  eachWeekOfInterval,
+  eachMonthOfInterval,
 } from "date-fns"
+import { cn } from "@/lib/utils"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 // NO date-fns-tz IMPORTS HERE - we'll do manual offset (or in this case, remove it)
 
 import {
@@ -33,6 +48,7 @@ import {
   UserCheck,
   Heart,
   X,
+  CalendarIcon,
 } from "lucide-react"
 
 // Shadcn/ui components
@@ -1151,45 +1167,6 @@ const DashboardPage: React.FC = () => {
     }
   }, [doctorConsultations])
 
-  // Last 3 days chart
-  const chartData = useMemo(() => {
-    // Get dates for chart labels and data aggregation, assuming direct use of current system date for 'today'
-    // and that the fetched data's 'created_at' can be directly parsed for comparison.
-    const today = format(new Date(), "yyyy-MM-dd") // Local system's today
-    const yesterday = format(addDays(new Date(), -1), "yyyy-MM-dd")
-    const dayBeforeYesterday = format(addDays(new Date(), -2), "yyyy-MM-dd")
-
-    const opdCounts: Record<string, number> = { [dayBeforeYesterday]: 0, [yesterday]: 0, [today]: 0 }
-    opdAppointments.forEach((a) => {
-      // Aggregate by the `created_at` date directly (assumed to be in IST if DB stores that way)
-      const dateKey = format(parseISO(a.created_at), "yyyy-MM-dd")
-      if (opdCounts[dateKey] !== undefined) opdCounts[dateKey]++
-    })
-
-    const ipdCounts: Record<string, number> = { [dayBeforeYesterday]: 0, [yesterday]: 0, [today]: 0 }
-    ipdAppointments.forEach((a) => {
-      // Aggregate by the `created_at` date directly (assumed to be in IST if DB stores that way)
-      const dateKey = format(parseISO(a.created_at), "yyyy-MM-dd")
-      if (ipdCounts[dateKey] !== undefined) ipdCounts[dateKey]++
-    })
-
-    return {
-      labels: [dayBeforeYesterday, yesterday, today],
-      datasets: [
-        {
-          label: "OPD Appointments",
-          data: [opdCounts[dayBeforeYesterday], opdCounts[yesterday], opdCounts[today]],
-          backgroundColor: "rgba(54,162,235,0.6)",
-        },
-        {
-          label: "IPD Admissions",
-          data: [ipdCounts[dayBeforeYesterday], ipdCounts[yesterday], ipdCounts[today]],
-          backgroundColor: "rgba(255,99,132,0.6)",
-        },
-      ],
-    }
-  }, [opdAppointments, ipdAppointments])
-
   // Handlers
   const handleDateRangeChange = (startStr: string, endStr: string) => {
     if (startStr && endStr) {
@@ -1609,6 +1586,115 @@ const DashboardPage: React.FC = () => {
     if (counts.custom) parts.push(`${counts.custom} Custom Service${counts.custom > 1 ? "s" : ""}`)
     return parts.join(", ") || "No services"
   }
+
+  const today = new Date()
+  const currentMonthStart = startOfMonth(today)
+  const currentMonthEnd = endOfMonth(today)
+  const currentYearStart = startOfYear(today)
+  const currentYearEnd = endOfYear(today)
+
+  const [filterType, setFilterType] = useState<"month" | "year" | "custom">("month")
+  const [customDateRange, setCustomDateRange] = useState<{
+    from: Date
+    to?: Date
+  } | undefined>(undefined)
+
+  useEffect(() => {
+    if (filterType === "custom" && !customDateRange) {
+      setCustomDateRange({ from: today, to: today })
+    } else if (filterType !== "custom" && customDateRange) {
+      setCustomDateRange(undefined)
+    }
+  }, [filterType, customDateRange, today])
+
+  const getDateRange = useMemo(() => {
+    switch (filterType) {
+      case "month":
+        return { from: currentMonthStart, to: currentMonthEnd }
+      case "year":
+        return { from: currentYearStart, to: currentYearEnd }
+      case "custom":
+        return customDateRange
+      default:
+        return { from: currentMonthStart, to: currentMonthEnd }
+    }
+  }, [filterType, customDateRange, currentMonthStart, currentMonthEnd, currentYearStart, currentYearEnd])
+
+  // Last 3 days chart
+  const chartData = useMemo(() => {
+    const { from, to } = getDateRange || {}
+
+    if (!from || !to) {
+      return {
+        labels: [],
+        datasets: [],
+      }
+    }
+
+    let labels: string[] = []
+    let dateKeys: string[] = []
+
+    if (filterType === "month") {
+      const weeks = eachWeekOfInterval({ start: from, end: to }, { weekStartsOn: 1 }) // Monday as start of week
+      labels = weeks.map((week, index) => `Week ${index + 1}`)
+      dateKeys = weeks.map((week) => format(week, "yyyy-MM-dd")) // Use start of week as key
+    } else if (filterType === "year") {
+      const months = eachMonthOfInterval({ start: from, end: to })
+      labels = months.map((month) => format(month, "MMM"))
+      dateKeys = months.map((month) => format(month, "yyyy-MM")) // Use year-month as key
+    } else {
+      // custom range or default to day view
+      const days = eachDayOfInterval({ start: from, end: to })
+      labels = days.map((day) => format(day, "MMM dd"))
+      dateKeys = days.map((day) => format(day, "yyyy-MM-dd"))
+    }
+
+    const initialCounts: Record<string, number> = Object.fromEntries(dateKeys.map((key) => [key, 0]))
+
+    const opdCounts: Record<string, number> = { ...initialCounts }
+    opdAppointments.forEach((a) => {
+      const date = parseISO(a.created_at)
+      let key: string
+      if (filterType === "month") {
+        key = format(eachWeekOfInterval({ start: from, end: to }, { weekStartsOn: 1 }).find(week => date >= week && date <= addDays(week, 6)) || from, "yyyy-MM-dd")
+      } else if (filterType === "year") {
+        key = format(date, "yyyy-MM")
+      } else {
+        key = format(date, "yyyy-MM-dd")
+      }
+      if (opdCounts[key] !== undefined) opdCounts[key]++
+    })
+
+    const ipdCounts: Record<string, number> = { ...initialCounts }
+    ipdAppointments.forEach((a) => {
+      const date = parseISO(a.created_at)
+      let key: string
+      if (filterType === "month") {
+        key = format(eachWeekOfInterval({ start: from, end: to }, { weekStartsOn: 1 }).find(week => date >= week && date <= addDays(week, 6)) || from, "yyyy-MM-dd")
+      } else if (filterType === "year") {
+        key = format(date, "yyyy-MM")
+      } else {
+        key = format(date, "yyyy-MM-dd")
+      }
+      if (ipdCounts[key] !== undefined) ipdCounts[key]++
+    })
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: "OPD Appointments",
+          data: dateKeys.map((key) => opdCounts[key]),
+          backgroundColor: "rgba(54,162,235,0.6)",
+        },
+        {
+          label: "IPD Admissions",
+          data: dateKeys.map((key) => ipdCounts[key]),
+          backgroundColor: "rgba(255,99,132,0.6)",
+        },
+      ],
+    }
+  }, [opdAppointments, ipdAppointments, getDateRange, filterType])
 
   return (
     <Layout>
@@ -2071,8 +2157,63 @@ const DashboardPage: React.FC = () => {
                   </Card>
                   {/* Appointments Overview Chart */}
                   <Card className="bg-white shadow-lg rounded-xl p-6 border border-gray-100">
-                    <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                      <Activity className="mr-2 h-5 w-5 text-gray-600" /> Appointments Overview
+                    <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center justify-between">
+                      <div className="flex items-center">
+                        <Activity className="mr-2 h-5 w-5 text-gray-600" /> Appointments Overview
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Select value={filterType} onValueChange={(value: "month" | "year" | "custom") => setFilterType(value)}>
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Select Filter" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="month">This Month</SelectItem>
+                            <SelectItem value="year">This Year</SelectItem>
+                            <SelectItem value="custom">Custom Date</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {filterType === "custom" && (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                id="date"
+                                variant="outline"
+                                className={cn(
+                                  "w-[300px] justify-start text-left font-normal",
+                                  !customDateRange && "text-muted-foreground"
+                                )}
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {customDateRange?.from ? (
+                                  customDateRange.to ? (
+                                    `${format(customDateRange.from, "LLL dd, y")} - ${format(customDateRange.to, "LLL dd, y")}`
+                                  ) : (
+                                    format(customDateRange.from, "LLL dd, y")
+                                  )
+                                ) : (
+                                  <span>Pick a date</span>
+                                )}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                initialFocus
+                                mode="range"
+                                defaultMonth={customDateRange?.from}
+                                selected={customDateRange}
+                                onSelect={(range) => {
+                                  if (range?.from) {
+                                    setCustomDateRange(range as { from: Date; to?: Date })
+                                  } else {
+                                    setCustomDateRange(undefined)
+                                  }
+                                }}
+                                numberOfMonths={2}
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        )}
+                      </div>
                     </h2>
                     <Bar
                       data={chartData}

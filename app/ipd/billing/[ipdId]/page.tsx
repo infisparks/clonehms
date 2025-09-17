@@ -642,7 +642,7 @@ export default function BillingPage() {
     } else if (amountType === "refund") {
       message = `Dear ${patientName}, a refund of Rs ${paymentAmount.toLocaleString()} has been processed to your account. Your updated total deposit is Rs ${updatedDeposit.toLocaleString()}.`
     }
-    const payload = { token: "99583991573", number: `91${patientMobile}`, message }
+    const payload = { token: "9958399157", number: `91${patientMobile}`, message }
     try {
       const response = await fetch(apiUrl, {
         method: "POST",

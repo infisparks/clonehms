@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 
     // 4. Send to WhatsApp image API
     const whatsappApiUrl = 'https://a.infispark.in/send-image-url';
-    const whatsappToken = '99583991573'; // Your provided token
+    const whatsappToken = '9958399157'; // Your provided token
     const recipientNumber = '918907866786'; // Your provided number
 
     const whatsappRes = await fetch(whatsappApiUrl, {
