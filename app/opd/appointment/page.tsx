@@ -527,7 +527,7 @@ const AppointmentPage = () => {
         toast.success("WhatsApp confirmation sent!")
       } else {
         console.error("WhatsApp API Error:", data.message)
-        toast.warn(`Failed to send WhatsApp confirmation: ${data.message}`)
+        // toast.warn(`Failed to send WhatsApp confirmation: ${data.message}`)
       }
     } catch (error) {
       console.error("Error sending WhatsApp message:", error)
